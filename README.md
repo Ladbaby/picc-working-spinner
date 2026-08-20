@@ -2,7 +2,7 @@
 
 [![npm downloads](https://img.shields.io/npm/dt/@ladbabynpm/picc-working-spinner.svg)](https://www.npmjs.com/package/@ladbabynpm/picc-working-spinner)
 
-Claude Code-style spinner `✻` for pi: spinner glyph, shimmer sweep, mode-aware status line, stall detection, thinking glow, smooth token counter.
+Claude Code style spinner `· ✢ ✳ ✶ ✻ ✽` for pi: spinner glyph, shimmer sweep, mode-aware status line, stall detection, thinking glow, smooth token counter.
 Part of [picc](https://github.com/Ladbaby/picc), a pi agent setup mirroring Claude Code's harness.
 
 Fork of [`npm:pi-claude-shimmer`](https://github.com/ouzhenkun/pi-claude-shimmer), better aligned with the actual Claude Code spinner implementation.
