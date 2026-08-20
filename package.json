@@ -1,8 +1,8 @@
 {
   "name": "@ladbabynpm/picc-working-spinner",
-  "version": "1.1.0",
+  "version": "0.1.0",
   "type": "module",
-  "description": "Claude Code-style spinner for pi: spinner glyph, shimmer sweep, mode-aware status line, stall detection, thinking glow, smooth token counter. Aligned with claude-code's behavior (verbatim 186-verb list, platform-aware glyphs, time-based stall ramp, 2s thinking min-display).",
+  "description": "Claude Code-style spinner for pi: spinner glyph, shimmer sweep, mode-aware status line, stall detection, thinking glow, smooth token counter.",
   "keywords": [
     "pi",
     "pi-package",
