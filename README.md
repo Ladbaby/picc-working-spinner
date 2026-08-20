@@ -1,12 +1,20 @@
 # picc-working-spinner
 
-Fork of [`npm:pi-claude-shimmer`](https://github.com/ouzhenkun/pi-claude-shimmer), aligned with the actual Claude Code spinner implementation.
+[![npm downloads](https://img.shields.io/npm/dt/@ladbabynpm/picc-working-spinner.svg)](https://www.npmjs.com/package/@ladbabynpm/picc-working-spinner)
+
+Claude Code-style spinner `✻` for pi: spinner glyph, shimmer sweep, mode-aware status line, stall detection, thinking glow, smooth token counter.
+Part of [picc](https://github.com/Ladbaby/picc), a pi agent setup mirroring Claude Code's harness.
+
+Fork of [`npm:pi-claude-shimmer`](https://github.com/ouzhenkun/pi-claude-shimmer), better aligned with the actual Claude Code spinner implementation.
+
+## Usage
+
+Install via `pi install npm:@ladbabynpm/picc-working-spinner`.
 
 ## Changes vs. upstream
 
-**Bug fix from v1.0.5 (carried forward):** `agent_end` previously reported the final turn's duration instead of total run time. `Date.now() - (agentStart || turnStart)` is now used in the completion message, matching the live status calculation.
-
-**v1.1.0 — full fidelity to Claude Code.** Re-derived each animation parameter from the actual claude-code source.
+- `agent_end` previously reported the final turn's duration instead of total run time. `Date.now() - (agentStart || turnStart)` is now used in the completion message, matching the live status calculation.
+- Re-derived each animation parameter from the actual claude-code source.
 
 | Area | Before | After |
 | --- | --- | --- |
@@ -31,24 +39,3 @@ Fork of [`npm:pi-claude-shimmer`](https://github.com/ouzhenkun/pi-claude-shimmer
   - `tool-input` / `tool-use` — flash oscillates entire verb between base and shimmer
 - **Stall:** if no tokens for 3s and no tools active, verb blends from orange to `rgb(171,43,63)` over the next 2s. Resets instantly on token arrival.
 - **Completion:** `✻ ${past-tense verb} for ${duration}` via notification, randomly picked from `["Baked","Brewed","Churned","Cogitated","Cooked","Crunched","Sautéed","Worked"]`.
-
-## Files
-
-- `index.ts` — full source; rewritten to mirror `components/Spinner/{utils.ts,SpinnerGlyph.tsx,SpinnerAnimationRow.tsx,useStalledAnimation.ts}` and `constants/{spinnerVerbs.ts,turnCompletionVerbs.ts}`.
-- `package.json` — drop-in manifest; bumped to v1.1.0.
-
-No build step. pi loads `index.ts` directly via jiti.
-
-## Usage
-
-Loaded automatically once `settings.json` lists it under `packages`:
-
-```json
-"packages": [
-  "extensions/picc-working-spinner"
-]
-```
-
-## Provenance
-
-Forked from `npm:pi-claude-shimmer@1.0.4`. v1.0.5 added the elapsed-time bug fix. v1.1.0 re-derives the spinner against the actual claude-code reference implementation.
