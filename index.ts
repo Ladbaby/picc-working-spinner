@@ -8,7 +8,7 @@
  *     macOS:   ['·','✢','✳','✶','✻','✽']
  *     other:   ['·','✢','*','✶','✻','✽']
  * - Live message verb text always includes trailing ellipsis (effectiveVerb + '…')
- * - Status parts render left-to-right inside parens: [thinking, tokens, timer]
+ * - Status parts render left-to-right inside parens: [timer, tokens, thinking]
  * - Arrow prefix: ↑ for requesting, ↓ for everything else (in status parts, not glyph)
  * - Spinner glyph frame is continuous across mode changes (no setWorkingIndicator on mode flip)
  * - Shimmer sweep across verb text (50ms requesting / 200ms working tick)
@@ -252,6 +252,26 @@ export default function (pi: ExtensionAPI) {
     const tokens = Math.max(0, _displayedTokens);
     const parts: string[] = [];
 
+    // Claude-code order inside the parens (SpinnerAnimationRow.tsx builds
+    // parts in render order): [timer, tokens, thinking] left-to-right.
+    // The timer is gated on the 30s threshold; tokens and thinking are
+    // gated on their own state.
+    if (elapsed > SHOW_TIMER_AFTER_MS) {
+      parts.push(formatDuration(elapsed));
+    }
+
+    if (mode === "requesting") {
+      // Show ↑ during the requesting phase even before any tokens arrive.
+      // This makes the ↑→↓ transition visible (the ↑ branch was previously
+      // dead because the arrow was gated behind `tokens > 0`, which is always
+      // false while requesting).
+      parts.push(
+        `${ARROW_REQUESTING}${tokens > 0 ? ` ${formatCount(tokens)} tokens` : ""}`,
+      );
+    } else if (tokens > 0) {
+      parts.push(`${ARROW_WORKING} ${formatCount(tokens)} tokens`);
+    }
+
     if (thinkingStatus === "thinking") {
       // Show "thinking" with effort suffix and sine-wave glow after 3s.
       // Mirrors SpinnerAnimationRow.tsx thinkingShimmerColor formula.
@@ -274,25 +294,6 @@ export default function (pi: ExtensionAPI) {
       );
     }
 
-    if (mode === "requesting") {
-      // Show ↑ during the requesting phase even before any tokens arrive.
-      // This makes the ↑→↓ transition visible (the ↑ branch was previously
-      // dead because the arrow was gated behind `tokens > 0`, which is always
-      // false while requesting).
-      parts.push(
-        `${ARROW_REQUESTING}${tokens > 0 ? ` ${formatCount(tokens)} tokens` : ""}`,
-      );
-    } else if (tokens > 0) {
-      parts.push(`${ARROW_WORKING} ${formatCount(tokens)} tokens`);
-    }
-
-    if (elapsed > SHOW_TIMER_AFTER_MS) {
-      parts.push(formatDuration(elapsed));
-    }
-
-    // Claude-code order: [thinking, tokens, timer] left-to-right inside
-    // the parens (SpinnerAnimationRow.tsx builds parts in render order).
-    // We push in that order above and return without reversing.
     return parts;
   }
 
