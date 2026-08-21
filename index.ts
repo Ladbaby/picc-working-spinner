@@ -594,6 +594,22 @@ export default function (pi: ExtensionAPI) {
 
       case "toolcall_start":
         setMode("tool-input");
+        lastTokenTime = Date.now();
+        break;
+
+      case "toolcall_delta":
+        lastTokenTime = Date.now();
+        if (typeof evt.delta === "string") {
+          responseLen += evt.delta.length;
+        }
+        break;
+
+      case "toolcall_end":
+        lastTokenTime = Date.now();
+        responseLen = Math.max(
+          responseLen,
+          JSON.stringify(evt.toolCall.arguments ?? "").length,
+        );
         break;
 
       case "done":
@@ -604,8 +620,13 @@ export default function (pi: ExtensionAPI) {
         }
         if (evt.message?.content) {
           responseLen = (evt.message.content as any[]).reduce(
-            (s: number, b: any) =>
-              s + (b.type === "text" && typeof b.text === "string" ? b.text.length : 0),
+            (s: number, b: any) => {
+              if (b.type === "text" && typeof b.text === "string")
+                return s + b.text.length;
+              if (b.type === "toolCall")
+                return s + JSON.stringify(b.arguments ?? "").length;
+              return s;
+            },
             0,
           );
         }
