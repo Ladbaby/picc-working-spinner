@@ -211,6 +211,10 @@ export default function (pi: ExtensionAPI) {
   let _showDurationTimer: ReturnType<typeof setTimeout> | null = null;
   let _clearStatusTimer: ReturnType<typeof setTimeout> | null = null;
   let responseLen = 0;
+  // Per-message length accumulated from streamed deltas. Used on `done` to
+  // reconcile non-streamed content without double-counting (mirrors Claude
+  // Code, which only ever adds streamed deltas and accumulates per run).
+  let _streamedLen = 0;
   let lastTokenTime = 0;
   let turnActive = false;
   let activeToolCount = 0;
@@ -270,9 +274,16 @@ export default function (pi: ExtensionAPI) {
       );
     }
 
-    if (tokens > 0) {
-      const arrow = mode === "requesting" ? ARROW_REQUESTING : ARROW_WORKING;
-      parts.push(`${arrow} ${formatCount(tokens)} tokens`);
+    if (mode === "requesting") {
+      // Show ↑ during the requesting phase even before any tokens arrive.
+      // This makes the ↑→↓ transition visible (the ↑ branch was previously
+      // dead because the arrow was gated behind `tokens > 0`, which is always
+      // false while requesting).
+      parts.push(
+        `${ARROW_REQUESTING}${tokens > 0 ? ` ${formatCount(tokens)} tokens` : ""}`,
+      );
+    } else if (tokens > 0) {
+      parts.push(`${ARROW_WORKING} ${formatCount(tokens)} tokens`);
     }
 
     if (elapsed > SHOW_TIMER_AFTER_MS) {
@@ -479,6 +490,21 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
+  // Zero the run-scoped token counters. Called only at run boundaries
+  // (agent_start / non-retry agent_end) so the displayed token count is a
+  // running total that persists across every assistant message in a run,
+  // matching Claude Code. NOT called per turn.
+  function resetRunCounters() {
+    responseLen = 0;
+    _streamedLen = 0;
+    _displayedTokens = 0;
+    lastTokenTime = 0;
+    activeToolCount = 0;
+  }
+
+  // Per-turn UI reset only (mode, thinking timers, stall, spinner). Does NOT
+  // touch the token counters — those persist across turns and are reset in
+  // resetRunCounters() at run boundaries.
   function resetTurn() {
     stopShimmer();
     if (_showDurationTimer) {
@@ -500,12 +526,8 @@ export default function (pi: ExtensionAPI) {
     mode = "requesting";
     thinkingStatus = null;
     _thinkingStart = null;
-    responseLen = 0;
     _stallIntensity = 0;
     _stallTarget = 0;
-    _displayedTokens = 0;
-    lastTokenTime = 0;
-    activeToolCount = 0;
     // setGlyphs() stays here so a new turn's spinner is initialized, but is
     // NOT called from setMode() — see comment in setMode above.
     setGlyphs();
@@ -532,8 +554,11 @@ export default function (pi: ExtensionAPI) {
   // agent_start fires before turn_start and is the moment pi rebuilds the
   // working loader. Initialize shimmer here so the loader picks up our
   // message + indicator immediately instead of flashing "Working...".
+  // Also resets the run-scoped token counters: each agent run corresponds to
+  // one user prompt, and Claude Code zeroes responseLengthRef per prompt.
   pi.on("agent_start", async (_event, ctx) => {
     ctx_ = ctx;
+    resetRunCounters();
     if (!agentStart) agentStart = Date.now();
     if (!turnActive) initTurn();
   });
@@ -565,6 +590,17 @@ export default function (pi: ExtensionAPI) {
         }
         break;
 
+      case "thinking_delta":
+        // Count reasoning content toward the token estimate, matching Claude
+        // Code (onUpdateLength on thinking deltas). Mode is already "thinking"
+        // from thinking_start; no mode change needed here.
+        if (typeof evt.delta === "string") {
+          lastTokenTime = Date.now();
+          responseLen += evt.delta.length;
+          _streamedLen += evt.delta.length;
+        }
+        break;
+
       case "thinking_end":
         onThinkingEnd();
         break;
@@ -583,14 +619,12 @@ export default function (pi: ExtensionAPI) {
         lastTokenTime = Date.now();
         if (typeof evt.delta === "string") {
           responseLen += evt.delta.length;
+          _streamedLen += evt.delta.length;
         }
         break;
 
-      case "text_end":
-        if (typeof evt.content === "string") {
-          responseLen = Math.max(responseLen, evt.content.length);
-        }
-        break;
+      // text_end carries the full block but its deltas were already counted
+      // above; no snapping needed (would risk dropping prior turns' total).
 
       case "toolcall_start":
         setMode("tool-input");
@@ -601,16 +635,12 @@ export default function (pi: ExtensionAPI) {
         lastTokenTime = Date.now();
         if (typeof evt.delta === "string") {
           responseLen += evt.delta.length;
+          _streamedLen += evt.delta.length;
         }
         break;
 
-      case "toolcall_end":
-        lastTokenTime = Date.now();
-        responseLen = Math.max(
-          responseLen,
-          JSON.stringify(evt.toolCall.arguments ?? "").length,
-        );
-        break;
+      // toolcall_end carries the final args but its deltas were already
+      // counted; no snapping needed (see text_end note).
 
       case "done":
         // Claude Code: message_stop switches to tool-use;
@@ -619,16 +649,24 @@ export default function (pi: ExtensionAPI) {
           setMode("tool-use");
         }
         if (evt.message?.content) {
-          responseLen = (evt.message.content as any[]).reduce(
+          // Accumulate (never overwrite) so the total persists across turns.
+          // Add only the length that deltas did NOT already count, so a
+          // fully-streamed message adds ~0 while a non-streamed one adds its
+          // full content.
+          const msgLen = (evt.message.content as any[]).reduce(
             (s: number, b: any) => {
               if (b.type === "text" && typeof b.text === "string")
                 return s + b.text.length;
+              if (b.type === "thinking" && typeof b.thinking === "string")
+                return s + b.thinking.length;
               if (b.type === "toolCall")
                 return s + JSON.stringify(b.arguments ?? "").length;
               return s;
             },
             0,
           );
+          responseLen += Math.max(0, msgLen - _streamedLen);
+          _streamedLen = 0;
         }
         break;
     }
@@ -656,7 +694,9 @@ export default function (pi: ExtensionAPI) {
     thinkingStatus = null;
     _thinkingStart = null;
 
-    responseLen = 0;
+    // Do NOT reset responseLen/_displayedTokens here: the token count must
+    // persist across assistant messages within a run (Claude Code resets it
+    // only per prompt and at run end, never between turns).
     activeToolCount = 0;
   });
 
@@ -684,6 +724,9 @@ export default function (pi: ExtensionAPI) {
 
     agentStart = 0;
     turnStart = 0;
+    // The run truly stopped: reset the accumulated token counters (mirrors
+    // Claude Code resetLoadingState zeroing responseLengthRef on run end).
+    resetRunCounters();
 
     const ctx = ctx_;
     if (ctx) {
