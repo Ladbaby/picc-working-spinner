@@ -13,10 +13,20 @@
     "claude-code"
   ],
   "license": "MIT",
+  "author": "ladbabynpm",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ladbaby/picc-working-spinner.git"
+  },
+  "homepage": "https://github.com/Ladbaby/picc-working-spinner",
+  "bugs": {
+    "url": "https://github.com/Ladbaby/picc-working-spinner/issues"
+  },
   "files": [
     "index.ts",
     "README.md",
-    "package.json"
+    "package.json",
+    "LICENSE"
   ],
   "pi": {
     "extensions": [
