@@ -136,7 +136,17 @@ function formatDuration(ms: number): string {
 }
 
 function formatCount(n: number): string {
-  return new Intl.NumberFormat("en-US").format(n);
+  // Compact notation for large counts, mirroring claude-code
+  // utils/format.ts formatNumber(): numbers below 1000 stay plain, and
+  // 1000+ render as "1.3k" / "1.2m" etc. (lowercase suffix).
+  if (n < 1000) return n.toString();
+  return new Intl.NumberFormat("en-US", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1,
+  })
+    .format(n)
+    .toLowerCase();
 }
 
 // ─── Shimmer Engine ───────────────────────────────────────────────
